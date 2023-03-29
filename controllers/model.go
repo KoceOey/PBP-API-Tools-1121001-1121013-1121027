@@ -9,9 +9,10 @@ type User struct {
 }
 
 type FailedAttempt struct {
-	Id int `json:"userid"`
-	User User `json:"user"`
-	Time string `json:"time"` 
+	Id       int    `json:"userid"`
+	User     User   `json:"user"`
+	Time     string `json:"time"`
+	Platform string `json:"platform"`
 }
 
 type ResponseData struct {
