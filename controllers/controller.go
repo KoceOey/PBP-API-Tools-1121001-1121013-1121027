@@ -1,20 +1,36 @@
 package controllers
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 
+	redis "github.com/redis/go-redis/v9"
 	"gopkg.in/gomail.v2"
 )
 
-func CheckCron(){
+var rdb *redis.Client
+var context_redis = context.Background()
+
+func RedisInit() {
+	db := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+
+	rdb = db
+}
+
+func CheckCron() {
 	fmt.Println("halo")
 }
 
-func FailedHistoryCheck(){
+func FailedHistoryCheck() {
 	db := connect()
 	defer db.Close()
 
@@ -38,7 +54,7 @@ func FailedHistoryCheck(){
 
 	for i, x := range uid {
 		fmt.Println("loop ke-" + strconv.Itoa(i))
-		res, err := db.Query("SELECT TIMESTAMPDIFF(minute,(SELECT time FROM failed_log WHERE userid = ? ORDER BY time DESC LIMIT 1),CURRENT_TIMESTAMP)",x)
+		res, err := db.Query("SELECT TIMESTAMPDIFF(minute,(SELECT time FROM failed_log WHERE userid = ? ORDER BY time DESC LIMIT 1),CURRENT_TIMESTAMP)", x)
 		if err != nil {
 			log.Println(err)
 			return
@@ -59,8 +75,29 @@ func FailedHistoryCheck(){
 	}
 }
 
-func SendSuccessEmail(w http.ResponseWriter, r *http.Request, db *sql.DB, user User, platform string) {
+func GetRedis() string {
+
+	val, err := rdb.Get(context_redis, "key").Result()
+	if err == redis.Nil {
+		log.Println(http.StatusNotFound, "data tidak ditemukan")
+	} else if err != nil {
+		log.Println(http.StatusBadRequest, "error get redis")
+	}
+
+	return val
+}
+
+func SendSuccessEmail(w http.ResponseWriter, r *http.Request, db *sql.DB, platform string) {
 	mail := gomail.NewMessage()
+
+	var user User
+	err := json.Unmarshal([]byte(GetRedis()), &user)
+	if err != nil {
+		log.Println(http.StatusBadRequest, "error unmarshal redis")
+	}
+
+	log.Println("err : ")
+	log.Println(err)
 
 	mail.SetHeader("From", "hehehiha21@outlook.com")
 	mail.SetHeader("To", user.Email)
@@ -75,8 +112,17 @@ func SendSuccessEmail(w http.ResponseWriter, r *http.Request, db *sql.DB, user U
 	}
 }
 
-func SendBlockedEmail(w http.ResponseWriter, r *http.Request, db *sql.DB, user User, attempts []FailedAttempt) {
+func SendBlockedEmail(w http.ResponseWriter, r *http.Request, db *sql.DB, attempts []FailedAttempt) {
 	mail := gomail.NewMessage()
+
+	var user User
+	err := json.Unmarshal([]byte(GetRedis()), &user)
+	if err != nil {
+		log.Println(http.StatusBadRequest, "error unmarshal redis")
+	}
+
+	log.Println("err : ")
+	log.Println(err)
 
 	mail.SetHeader("From", "hehehiha21@outlook.com")
 	mail.SetHeader("To", user.Email)
@@ -111,7 +157,7 @@ func FailedLogin(w http.ResponseWriter, r *http.Request, db *sql.DB, user User, 
 		fmt.Println("Gagal mendapatkan history failed login")
 		return
 	} else if len(attempts) > 2 {
-		go SendBlockedEmail(w, r, db, user, attempts)
+		go SendBlockedEmail(w, r, db, attempts)
 		db.Exec("UPDATE users set state = 1 WHERE id = ?", user.Id)
 		sendResponse(w, 400, "Wrong Email/Password!! Your account is now blocked")
 		return
@@ -176,6 +222,21 @@ func UserLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	reqRedis := User{
+		Id:       user.Id,
+		Name:     user.Name,
+		Email:    user.Email,
+		Password: user.Password,
+		State:    user.State,
+	}
+	req, _ := json.Marshal(reqRedis)
+	RedisInit()
+	errSet := rdb.Set(context_redis, "key", req, 0).Err()
+
+	if errSet != nil {
+		log.Println("Error Set Redis", errSet)
+	}
+
 	// check account block/active
 	if user.State == 1 {
 		sendResponse(w, 400, "Your account is blocked because you have failed to login 3 times!")
@@ -194,7 +255,7 @@ func UserLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go SendSuccessEmail(w, r, db, user, header)
+	go SendSuccessEmail(w, r, db, header)
 
 	DeleteFailedHistory(db, user.Id)
 
