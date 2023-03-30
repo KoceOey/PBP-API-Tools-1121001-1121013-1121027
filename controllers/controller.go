@@ -62,13 +62,13 @@ func FailedHistoryCheck(){
 func SendSuccessEmail(w http.ResponseWriter, r *http.Request, db *sql.DB, user User, platform string) {
 	mail := gomail.NewMessage()
 
-	mail.SetHeader("From", "hehehiha99@gmail.com")
+	mail.SetHeader("From", "hehehiha21@outlook.com")
 	mail.SetHeader("To", user.Email)
 	mail.SetHeader("Subject", "A New Log In")
 	text := "Hello, " + user.Name + "! \nA new log in was made on " + platform
 	mail.SetBody("text/plain", text)
 
-	dialer := gomail.NewDialer("smtp.gmail.com", 587, "hehehiha99@gmail.com", "jmezoyhqkqamvdhr")
+	dialer := gomail.NewDialer("smtp-mail.outlook.com", 587, "hehehiha21@outlook.com", "Aw1kW0k!!")
 	if err := dialer.DialAndSend(mail); err != nil {
 		fmt.Println(err)
 		panic(err)
@@ -78,7 +78,7 @@ func SendSuccessEmail(w http.ResponseWriter, r *http.Request, db *sql.DB, user U
 func SendBlockedEmail(w http.ResponseWriter, r *http.Request, db *sql.DB, user User, attempts []FailedAttempt) {
 	mail := gomail.NewMessage()
 
-	mail.SetHeader("From", "hehehiha99@gmail.com")
+	mail.SetHeader("From", "hehehiha21@outlook.com")
 	mail.SetHeader("To", user.Email)
 	mail.SetHeader("Subject", "Account Blocked")
 	text := "Hello, " + user.Name + "! Your account is block due to failed to log in 3 times, here are the login attempts, \n"
@@ -87,7 +87,7 @@ func SendBlockedEmail(w http.ResponseWriter, r *http.Request, db *sql.DB, user U
 	}
 	mail.SetBody("text/plain", text)
 
-	dialer := gomail.NewDialer("smtp.gmail.com", 587, "hehehiha99@gmail.com", "jmezoyhqkqamvdhr")
+	dialer := gomail.NewDialer("smtp-mail.outlook.com", 587, "hehehiha21@outlook.com", "Aw1kW0k!!")
 	if err := dialer.DialAndSend(mail); err != nil {
 		fmt.Println(err)
 		panic(err)
@@ -111,8 +111,8 @@ func FailedLogin(w http.ResponseWriter, r *http.Request, db *sql.DB, user User, 
 		fmt.Println("Gagal mendapatkan history failed login")
 		return
 	} else if len(attempts) > 2 {
+		go SendBlockedEmail(w, r, db, user, attempts)
 		db.Exec("UPDATE users set state = 1 WHERE id = ?", user.Id)
-		SendBlockedEmail(w, r, db, user, attempts)
 		sendResponse(w, 400, "Wrong Email/Password!! Your account is now blocked")
 		return
 	}
@@ -194,9 +194,9 @@ func UserLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	DeleteFailedHistory(db, user.Id)
+	go SendSuccessEmail(w, r, db, user, header)
 
-	SendSuccessEmail(w, r, db, user, header)
+	DeleteFailedHistory(db, user.Id)
 
 	sendResponse(w, 200, "Success login from "+header)
 }
