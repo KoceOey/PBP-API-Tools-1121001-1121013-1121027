@@ -4,16 +4,21 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
+	"github.com/cobaGomail/controllers"
+	"github.com/go-co-op/gocron"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
-	"github.com/cobaGomail/controllers"
 )
 
-func main(){
+func main() {
 	router := mux.NewRouter()
+	s := gocron.NewScheduler(time.UTC)
+	s.Every(5).Second().Do(controllers.FailedHistoryCheck)
+	s.StartAsync()
 
-	router.HandleFunc("/login",controllers.UserLogin).Methods("POST")
+	router.HandleFunc("/login", controllers.UserLogin).Methods("POST")
 
 	http.Handle("/", router)
 	fmt.Println("Connected to port 8080")

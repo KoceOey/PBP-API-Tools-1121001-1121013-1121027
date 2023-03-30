@@ -5,10 +5,59 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
-	//"strconv"
 	"gopkg.in/gomail.v2"
 )
+
+func CheckCron(){
+	fmt.Println("halo")
+}
+
+func FailedHistoryCheck(){
+	db := connect()
+	defer db.Close()
+
+	rows, err := db.Query("SELECT userid FROM failed_log GROUP BY userid")
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	var userid int
+	var uid []int
+
+	for rows.Next() {
+		if err := rows.Scan(&userid); err != nil {
+			log.Println(err)
+			return
+		} else {
+			uid = append(uid, userid)
+		}
+	}
+
+	for i, x := range uid {
+		fmt.Println("loop ke-" + strconv.Itoa(i))
+		res, err := db.Query("SELECT TIMESTAMPDIFF(minute,(SELECT time FROM failed_log WHERE userid = ? ORDER BY time DESC LIMIT 1),CURRENT_TIMESTAMP)",x)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		var diff int
+
+		for res.Next() {
+			if err := res.Scan(&diff); err != nil {
+				log.Println(err)
+				return
+			}
+		}
+		if diff >= 5 {
+			DeleteFailedHistory(db, x)
+			db.Exec("UPDATE users set state = 0 WHERE id = ?", x)
+		}
+	}
+}
 
 func SendSuccessEmail(w http.ResponseWriter, r *http.Request, db *sql.DB, user User, platform string) {
 	mail := gomail.NewMessage()
@@ -45,8 +94,8 @@ func SendBlockedEmail(w http.ResponseWriter, r *http.Request, db *sql.DB, user U
 	}
 }
 
-func DeleteFailedHistory(w http.ResponseWriter, r *http.Request, db *sql.DB, user User) bool {
-	_, errQuery := db.Exec("DELETE FROM failed_log WHERE userid =?", user.Id)
+func DeleteFailedHistory(db *sql.DB, userid int) bool {
+	_, errQuery := db.Exec("DELETE FROM failed_log WHERE userid =?", userid)
 	if errQuery == nil {
 		return true
 	} else {
@@ -145,7 +194,7 @@ func UserLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	DeleteFailedHistory(w, r, db, user)
+	DeleteFailedHistory(db, user.Id)
 
 	SendSuccessEmail(w, r, db, user, header)
 
